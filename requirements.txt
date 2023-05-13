@@ -1,0 +1,10 @@
+# application
+langchain
+streamlit
+
+# testing
+black
+flake8
+isort
+mypy
+pytest
