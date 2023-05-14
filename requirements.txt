@@ -1,6 +1,10 @@
 # application
 langchain
+openai
+pandas
 streamlit
+# torch
+# transformers
 
 # testing
 black
