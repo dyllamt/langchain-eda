@@ -3,7 +3,6 @@ import sqlite3
 
 import pandas as pd
 
-
 TEST_DATABASE = "test.db"
 
 

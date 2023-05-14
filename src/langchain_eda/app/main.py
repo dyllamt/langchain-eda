@@ -21,8 +21,12 @@ def main():
     c1, c2 = st.columns(2)
     with c1:  # sql generation and query execution
         st.header("Data Explorer")
-        user_query, sql_query = components.generate_sql_query()
+        user_query, sql_query, handler = components.generate_sql_query()
         components.run_sql_query(connection, sql_query)
+
+        st.markdown("---")
+        with st.expander(label="*Lang log*"):
+            st.text(handler.text)
 
     # teardown test database
     utils.teardown(connection)

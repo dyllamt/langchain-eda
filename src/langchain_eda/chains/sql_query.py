@@ -85,7 +85,10 @@ class SQLQueryChain(Chain):
             "input": inputs[self.input_keys[0]],
             "table_names": ", ".join(table_names),
         }
-        selected_tables = self.selected_tables_chain.predict_and_parse(**selected_tables_inputs)
+        selected_tables = self.selected_tables_chain.predict_and_parse(
+            callbacks=_run_manager,
+            **selected_tables_inputs,
+        )
         table_names_to_use = [name for name in selected_tables if name.lower() in _lowercase_table_names]
 
         # generates sql query
@@ -94,7 +97,7 @@ class SQLQueryChain(Chain):
             "table_info": self.database.get_table_info(table_names=table_names_to_use),
             "stop": ["\nQuestion:"],
         }
-        sql_query = self.sql_query_chain.predict(callbacks=_run_manager.get_child(), **sql_query_inputs).strip()
+        sql_query = self.sql_query_chain.predict(callbacks=_run_manager, **sql_query_inputs).strip()
 
         # returns sql query
         return dict(result=sql_query)
