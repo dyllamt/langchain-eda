@@ -1,4 +1,5 @@
-from typing import Any
+import sqlite3
+from typing import Any, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -28,7 +29,7 @@ class TextLog(BaseCallbackHandler):
         self.text += "-----\n"
 
 
-def generate_sql_query():
+def _generate_sql_query() -> Tuple[str, str, TextLog]:
     handler = TextLog()
     user_query = st.text_area(label="What would you like to know?", value="Give me all the info on movies")
     sql_query = st.text_area(
@@ -37,6 +38,35 @@ def generate_sql_query():
     return user_query, sql_query, handler
 
 
-def run_sql_query(connection, sql_query):
+def _run_sql_query(connection: sqlite3.Connection, sql_query: str) -> pd.DataFrame:
     result = pd.read_sql(sql_query, connection)
     st.dataframe(result, use_container_width=True)
+    return result
+
+
+def _lang_log(handler: TextLog):
+    with st.expander(label="*Lang log*"):
+        st.text(handler.text)
+
+
+def data_explorer(connection: sqlite3.Connection) -> pd.DataFrame:
+    """Element that translates a natural language prompt into a SQL query and executes it against a database.
+
+    Additionally, the element will transcribe a log of the natural language communication.
+
+    Parameters
+    ----------
+    connection
+        Sqlite connection to a database.
+
+    Returns
+    -------
+    The results of the SQL query.
+    """
+    st.header("Data Explorer")
+    user_query, sql_query, handler = _generate_sql_query()
+    result = _run_sql_query(connection, sql_query)
+    st.markdown("---")
+    with st.expander(label="*Lang log*"):
+        st.text(handler.text)
+    return result
