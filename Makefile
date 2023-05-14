@@ -44,4 +44,4 @@ test:
 
 .PHONY: run
 run:
-	streamlit run src/langchain_eda/streamlit/main.py
+	streamlit run src/langchain_eda/app/main.py
