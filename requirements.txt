@@ -2,9 +2,8 @@
 langchain
 openai
 pandas
+plotly
 streamlit
-# torch
-# transformers
 
 # testing
 black
