@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import plotly.express as px
@@ -12,28 +12,28 @@ from langchain.prompts import PromptTemplate
 from marvin import ai_model
 from pydantic import Field
 
-
 # defines figures supported for plotting
 supported_figures = {
     "scatter": px.scatter,
-    "line": px.line,
+    # "line": px.line,
     "bar": px.bar,
     "histogram": px.histogram,
     "violin": px.violin,
 }
 
 
-@ai_model(llm_model_name='gpt-3.5-turbo', llm_model_temperature=0.0)
+@ai_model(llm_model_name="gpt-3.5-turbo", llm_model_temperature=0.0)
 class PlottingVariables(pydantic.BaseModel):
-    """Variable names to plot in a figure.
-    """
-    x: str = None
-    y: str = None
-    color: str = None
+    """Variable names to plot in a figure."""
+
+    x: Optional[str] = None
+    y: Optional[str] = None
+    color: Optional[str] = None
 
 
 # defines prompts and chain
-_figure_selection_prompt = """You are a data scientist that is skilled in programming and data visualization. Given an
+_figure_selection_prompt = (
+    """You are a data scientist that is skilled in programming and data visualization. Given an
 input question, determine an appropriate plotting visualization from the comma separated list below.
 
 Visualization choices: {plot_choices}
@@ -43,11 +43,13 @@ Use the following format:
 Question: Question here
 Visualization: One of the visualization choices
 
-You must match one of the visualizations exactly.
+Remember, you MUST match one of the visualization choices EXACTLY.
 
 Question: {query}
-Visualization: 
+Visualization:
 """
+    + " "
+)
 figure_selection_prompt = PromptTemplate(
     template=_figure_selection_prompt,
     input_variables=["query"],
@@ -82,7 +84,6 @@ column_replacement_prompt = PromptTemplate(
 
 
 class PlotlyExpressChain(Chain):
-
     dataframe: pd.DataFrame
     llm: BaseLanguageModel = Field(
         default_factory=lambda: ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0.0)  # type: ignore
@@ -117,9 +118,9 @@ class PlotlyExpressChain(Chain):
             "query": inputs[self.input_keys[0]],
             "stop": ["\nQuestion:"],
         }
-        figure_selection = self.figure_selection_chain.predict(
-            callbacks=_run_manager, **figure_selection_inputs
-        ).strip().lower()
+        figure_selection = (
+            self.figure_selection_chain.predict(callbacks=_run_manager, **figure_selection_inputs).strip().lower()
+        )
 
         # determines plotly kwargs
         initial_kwargs = self.plot_kwargs_chain(inputs[self.input_keys[0]]).json()
@@ -130,9 +131,7 @@ class PlotlyExpressChain(Chain):
             "allowed_columns": ", ".join(self.dataframe.columns),
             "json_structure": initial_kwargs,
         }
-        replaced_kwargs = self.replaced_kwargs_chain.predict(
-            callbacks=_run_manager, **replaced_kwargs_inputs
-        ).strip()
+        replaced_kwargs = self.replaced_kwargs_chain.predict(callbacks=_run_manager, **replaced_kwargs_inputs).strip()
 
         # returns kwargs for the selected plotting function
         return dict(plot=supported_figures[figure_selection], kwargs=replaced_kwargs)

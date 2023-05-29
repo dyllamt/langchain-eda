@@ -16,7 +16,6 @@ def get_or_create_eventloop():
 
 
 def main():
-
     # solves runtime error w/ marvin dependency
     loop = get_or_create_eventloop()
     asyncio.set_event_loop(loop)
@@ -31,7 +30,7 @@ def main():
     )
 
     # setup test database
-    connection = utils.setup()
+    connection = utils.app_setup()
 
     # displays application components
     col1, col2 = st.columns(2)
