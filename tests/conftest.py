@@ -13,3 +13,8 @@ def sqlite_uri():
 
     # teardown
     utils.teardown(connection)
+
+
+@pytest.fixture(scope="module")
+def dataframe():
+    yield utils.movie_dataset()

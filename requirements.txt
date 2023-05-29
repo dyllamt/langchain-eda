@@ -1,10 +1,11 @@
 # application
 langchain
+marvin
 openai
 pandas
+plotly
+pydantic
 streamlit
-# torch
-# transformers
 
 # testing
 black
