@@ -1,6 +1,4 @@
-from typing import Any, Callable, Dict, Type, Dict, Optional, List
-import inspect
-import io
+from typing import Any, Dict, Optional, List
 
 import pandas as pd
 import plotly.express as px
@@ -10,12 +8,12 @@ from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.chains.base import Chain
 from langchain.chains.llm import LLMChain
 from langchain.chat_models import ChatOpenAI
-from langchain.output_parsers import PydanticOutputParser
 from langchain.prompts import PromptTemplate
+from marvin import ai_model
 from pydantic import Field
 
 
-# dynamically creates up-to-date schemas for prompt formatting
+# defines figures supported for plotting
 supported_figures = {
     "scatter": px.scatter,
     "line": px.line,
@@ -25,35 +23,13 @@ supported_figures = {
 }
 
 
-def create_model_from_signature(
-    func: Callable, model_name: str, base_model: Type[pydantic.BaseModel] = pydantic.BaseModel
-):
-    args, _, varkw, defaults, kwonlyargs, kwonlydefaults, annotations = inspect.getfullargspec(func)
-    defaults = defaults or []
-    args = args or []
-
-    non_default_args = len(args) - len(defaults)
-    defaults = (...,) * non_default_args + defaults
-
-    keyword_only_params = {param: kwonlydefaults.get(param, Any) for param in kwonlyargs}
-    params = {param: (annotations.get(param, Any), default) for param, default in zip(args, defaults)}
-
-    class Config:
-        extra = "allow"
-
-    # Allow extra params if there is a **kwargs parameter in the function signature
-    config = Config if varkw else None
-
-    return pydantic.create_model(
-        model_name,
-        **params,
-        **keyword_only_params,
-        __base__=base_model,
-        __config__=config,
-    )
-
-
-supported_schemas = {i: create_model_from_signature(j, j.__name__) for i, j in supported_figures.items()}
+@ai_model(llm_model_name='gpt-3.5-turbo', llm_model_temperature=0.0)
+class PlottingVariables(pydantic.BaseModel):
+    """Variable names to plot in a figure.
+    """
+    x: str = None
+    y: str = None
+    color: str = None
 
 
 # defines prompts and chain
@@ -75,29 +51,33 @@ Visualization:
 figure_selection_prompt = PromptTemplate(
     template=_figure_selection_prompt,
     input_variables=["query"],
-    partial_variables={"plot_choices": ", ".join(supported_schemas.keys())},
+    partial_variables={"plot_choices": ", ".join(supported_figures.keys())},
 )
 
 
-_plotly_kwargs_prompt = """You are a data scientist that is skilled in python and data visualization. You need to
-create a visualization to answer a user's question based on the pandas DataFrame shown below. The visualization should
-be a {plot_type} chart.
+_column_replacement_prompt = """You are an expert in manipulating json data structures. Your job is to replace leaf
+values in json data structures. You must only replace leaf values in the data structure and you must replace all of
+them. The choices for replacement are as follows:
 
-{format_instructions}
+{allowed_columns}
 
-Use the following format:
+You must strictly replace the leaf values with values from the allowed list above.
 
-Question: Question here
-Dataframe info: Dataset info here
-Output schema: Output schema here
+Use the following rules for replacement:
+1. if a value in the json is conceptually similar or related to one of the allowed replacements, replace it with the
+allowed replacement. Be lenient with synonyms. For example, month is similar to time, year, minute, etc.
+2. if no value in the allowed replacements is similar to the json value, replace it with null
 
-Question: {query}
-Dataframe info: {dataframe_info}
-Output schema: 
+Remember that you must replace ALL of the leaf values and ONLY the leaf values. Remember that you must ONLY return the
+replaced json structure with no additional explanation. Remember that ONLY the allowed list of columns can be used. You
+must not leave any values un-replaced.
+
+# json structure
+{json_structure}
 """
-plotly_kwargs_prompt = PromptTemplate(
-    template=_plotly_kwargs_prompt,
-    input_variables=["query", "plot_type", "dataframe_info", "format_instructions"],
+column_replacement_prompt = PromptTemplate(
+    template=_column_replacement_prompt,
+    input_variables=["allowed_columns", "json_structure"],
 )
 
 
@@ -114,15 +94,19 @@ class PlotlyExpressChain(Chain):
 
     @property
     def output_keys(self) -> List[str]:
-        return ["result"]
+        return ["plot", "kwargs"]
 
     @property
     def figure_selection_chain(self):
         return LLMChain(llm=self.llm, prompt=figure_selection_prompt)
 
     @property
-    def plotly_kwargs_chain(self):
-        return LLMChain(llm=self.llm, prompt=plotly_kwargs_prompt)
+    def plot_kwargs_chain(self):
+        return PlottingVariables
+
+    @property
+    def replaced_kwargs_chain(self):
+        return LLMChain(llm=self.llm, prompt=column_replacement_prompt)
 
     def _call(self, inputs: Dict[str, Any], run_manager: Optional[CallbackManagerForChainRun] = None) -> Dict[str, Any]:
         # configures run manager
@@ -136,34 +120,23 @@ class PlotlyExpressChain(Chain):
         figure_selection = self.figure_selection_chain.predict(
             callbacks=_run_manager, **figure_selection_inputs
         ).strip().lower()
-        print(figure_selection)
 
-        # determines relevant plotly kwargs
-        dataframe_info = io.StringIO()
-        self.dataframe.info(buf=dataframe_info)
-        dataframe_info = dataframe_info.getvalue()  # get string value
-        print(dataframe_info)
+        # determines plotly kwargs
+        initial_kwargs = self.plot_kwargs_chain(inputs[self.input_keys[0]]).json()
+        print(initial_kwargs)
 
-        parser = PydanticOutputParser(pydantic_object=supported_schemas[figure_selection])
-        plotly_kwargs_inputs = {
-            "query": inputs[self.input_keys[0]],
-            "plot_type": figure_selection,
-            "dataframe_info": dataframe_info,
-            "format_instructions": parser.get_format_instructions(),
+        # string replaces with columns from dataframe
+        replaced_kwargs_inputs = {
+            "allowed_columns": ", ".join(self.dataframe.columns),
+            "json_structure": initial_kwargs,
         }
-        plotly_kwargs = self.plotly_kwargs_chain.predict(callbacks=_run_manager, **plotly_kwargs_inputs).strip()
+        replaced_kwargs = self.replaced_kwargs_chain.predict(
+            callbacks=_run_manager, **replaced_kwargs_inputs
+        ).strip()
 
-        # returns kwargs for plotly plot
-        return dict(result=plotly_kwargs)
-        # return dict(result=parser.parse(plotly_kwargs))
+        # returns kwargs for the selected plotting function
+        return dict(plot=supported_figures[figure_selection], kwargs=replaced_kwargs)
 
 
 def plotly_express_chain(dataframe: pd.DataFrame) -> PlotlyExpressChain:
     return PlotlyExpressChain(dataframe=dataframe)
-
-
-if __name__ == "__main__":
-    import langchain_eda.utils as utils
-    dataframe = utils.movie_dataset()
-    result = plotly_express_chain(dataframe).run("Scatter plot of movie score vs time")
-    print(result)

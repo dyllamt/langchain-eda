@@ -1,8 +1,10 @@
 # application
 langchain
+marvin
 openai
 pandas
 plotly
+pydantic
 streamlit
 
 # testing
