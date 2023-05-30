@@ -5,7 +5,7 @@ Exploratory data analysis via natural language.
 ![](app.png)
 
 - `sql_query_chain` - based on default langchain prompts for generating sql
-- `plotly_express_chain` - uses [marvin](https://github.com/PrefectHQ/marvin) for kwarg parsing
+- `plotly_express_chain` - uses [marvin](https://github.com/PrefectHQ/marvin) for keyword argument parsing
 
 ## Installation
 
