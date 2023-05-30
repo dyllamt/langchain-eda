@@ -32,24 +32,18 @@ class PlottingVariables(pydantic.BaseModel):
 
 
 # defines prompts and chain
-_figure_selection_prompt = (
-    """You are a data scientist that is skilled in programming and data visualization. Given an
-input question, determine an appropriate plotting visualization from the comma separated list below.
+_figure_selection_prompt = """You are a data scientist that is skilled in programming and data visualization. Given an
+input question, determine an appropriate plotting type from the comma separated list below:
 
-Visualization choices: {plot_choices}
+{plot_choices}
 
-Use the following format:
+You must choose an exact string match from one of the options above. Remember, you MUST match one of the visualization
+choices EXACTLY in your response. Do not include any additional information in your response, except for one of the
+visualization choices.
 
-Question: Question here
-Visualization: One of the visualization choices
-
-Remember, you MUST match one of the visualization choices EXACTLY.
-
-Question: {query}
-Visualization:
+# question
+{query}
 """
-    + " "
-)
 figure_selection_prompt = PromptTemplate(
     template=_figure_selection_prompt,
     input_variables=["query"],
@@ -121,10 +115,10 @@ class PlotlyExpressChain(Chain):
         figure_selection = (
             self.figure_selection_chain.predict(callbacks=_run_manager, **figure_selection_inputs).strip().lower()
         )
+        print(figure_selection)
 
         # determines plotly kwargs
         initial_kwargs = self.plot_kwargs_chain(inputs[self.input_keys[0]]).json()
-        print(initial_kwargs)
 
         # string replaces with columns from dataframe
         replaced_kwargs_inputs = {
