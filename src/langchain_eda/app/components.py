@@ -7,8 +7,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from langchain.callbacks.base import BaseCallbackHandler
 
-from langchain_eda.chains.sql_query import sql_query_chain
 from langchain_eda.chains.plotly_express import plotly_express_chain
+from langchain_eda.chains.sql_query import sql_query_chain
 
 
 class TextLog(BaseCallbackHandler):
@@ -77,7 +77,9 @@ def data_explorer(connection: sqlite3.Connection) -> pd.DataFrame:
 
 def _generate_plotly_spec(df: pd.DataFrame) -> Tuple[str, Callable, str, TextLog]:
     handler = TextLog()
-    user_query = st.text_area(label="What would you like to visualize?", value="Scatter plot of score over time.")
+    user_query = st.text_area(
+        label="What would you like to visualize?", value="Scatter plot of audience score vs rotten tomatoes."
+    )
     results = plotly_express_chain(df)(user_query, callbacks=[handler])
     return user_query, results["plot"], results["kwargs"], handler
 
